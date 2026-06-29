@@ -16,6 +16,7 @@ defmodule HawkEx.Billing do
   import Ecto.Query
 
   alias HawkEx.Config
+  alias HawkEx.Events
   alias HawkEx.Billing.{Plan, Subscription}
 
   # ---Public API---------------------------------------------------
@@ -36,6 +37,13 @@ defmodule HawkEx.Billing do
     with {:ok, plan} <- fetch_plan(plan_slug),
          :ok <- check_no_active_subscription(account_id),
          {:ok, subscription} <- create_subscription(account_id, plan) do
+      Events.emit("subscription.created", %{
+        account_id: account_id,
+        subscription_id: subscription.id,
+        plan_name: plan.name,
+        status: subscription.status
+      })
+
       {:ok, subscription}
     end
   end
@@ -76,13 +84,18 @@ defmodule HawkEx.Billing do
   def cancel(account) do
     account_id = extract_account_id(account)
 
-    with {:ok, subscription} <- get_active_subscription(account_id) do
-      subscription
-      |> Subscription.changeset(%{
-        status: "canceled",
-        canceled_at: utc_now()
+    with {:ok, subscription} <- get_active_subscription(account_id),
+         {:ok, canceled} <-
+           subscription
+           |> Subscription.changeset(%{status: "canceled", canceled_at: utc_now()})
+           |> Config.repo().update() do
+      Events.emit("subscription.canceled", %{
+        account_id: account_id,
+        subscription_id: canceled.id,
+        canceled_at: canceled.canceled_at
       })
-      |> Config.repo().update()
+
+      {:ok, canceled}
     end
   end
 
@@ -104,10 +117,18 @@ defmodule HawkEx.Billing do
     plan_slug = to_string(new_plan_name)
 
     with {:ok, plan} <- fetch_plan(plan_slug),
-         {:ok, subscription} <- get_active_subscription(account_id) do
-      subscription
-      |> Subscription.changeset(%{plan_id: plan.id})
-      |> Config.repo().update()
+         {:ok, subscription} <- get_active_subscription(account_id),
+         {:ok, updated} <-
+           subscription
+           |> Subscription.changeset(%{plan_id: plan.id})
+           |> Config.repo().update() do
+      Events.emit("subscription.plan_changed", %{
+        account_id: account_id,
+        subscription_id: updated.id,
+        new_plan_name: plan.name
+      })
+
+      {:ok, updated}
     end
   end
 

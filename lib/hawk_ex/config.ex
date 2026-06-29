@@ -28,4 +28,12 @@ defmodule HawkEx.Config do
       config :hawk_ex, account_schema: MyApp.AccountSchema.Organization
       """
   end
+
+  @doc """
+  Returns the configured PubSub module, or nil if not configured.
+  PubSub is optional — events are a no-op when not configured.
+  """
+  def pubsub do
+    Application.get_env(:hawk_ex, :pubsub, nil)
+  end
 end

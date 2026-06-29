@@ -20,6 +20,7 @@ defmodule HawkEx.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      mod: {HawkEx.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -30,6 +31,7 @@ defmodule HawkEx.MixProject do
       {:ecto_sql, "~> 3.10"},
       {:postgrex, ">= 0.0.0"},
       {:jason, "~> 1.4"},
+      {:phoenix_pubsub, "~> 2.1"},
 
       # Dev/Test only
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}
