@@ -11,8 +11,20 @@ defmodule HawkEx.Audit.Listener do
 
   @impl true
   def init(_opts) do
-    Events.subscribe()
+    send(self(), :subscribe)
     {:ok, %{}}
+  end
+
+  @impl true
+  def handle_info(:subscribe, state) do
+    case safe_subscribe() do
+      :ok ->
+        {:noreply, state}
+
+      :error ->
+        Process.send_after(self(), :subscribe, 500)
+        {:noreply, state}
+    end
   end
 
   @impl true
@@ -22,4 +34,13 @@ defmodule HawkEx.Audit.Listener do
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
+
+  defp safe_subscribe do
+    try do
+      Events.subscribe()
+      :ok
+    rescue
+      _ -> :error
+    end
+  end
 end

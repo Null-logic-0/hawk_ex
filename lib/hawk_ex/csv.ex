@@ -125,9 +125,10 @@ defmodule HawkEx.CSV do
   end
 
   defp enqueue_job(export, formatter_key) do
-    %{"export_id" => export.id, "formatter" => formatter_key}
-    |> HawkEx.CSV.ExportWorker.new()
-    |> Oban.insert(Config.oban())
+    args = %{"export_id" => export.id, "formatter" => formatter_key}
+
+    job = apply(HawkEx.CSV.ExportWorker, :new, [args])
+    apply(Oban, :insert, [Config.oban(), job])
   end
 
   defp formatter_to_key(formatter) when is_atom(formatter) do
