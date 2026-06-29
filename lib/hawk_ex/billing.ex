@@ -1,0 +1,174 @@
+defmodule HawkEx.Billing do
+  @moduledoc """
+  The Billing context. Public API for plan and subscription management.
+
+  ## Examples
+
+      HawkEx.Billing.subscribe(account, :pro)
+      HawkEx.Billing.current_subscription(account)
+      HawkEx.Billing.cancel(account)
+      HawkEx.Billing.change_plan(account, :enterprise)
+
+  All functions accept either an account struct (any Ecto schema with
+  an `:id` field) or a raw UUID binary.
+  """
+
+  import Ecto.Query
+
+  alias HawkEx.Config
+  alias HawkEx.Billing.{Plan, Subscription}
+
+  # ---Public API---------------------------------------------------
+
+  @doc """
+  Creates a subscription for an account on the given plan.
+
+  If the plan has `trial_days > 0`, the subscription starts in
+  `trialing` status. Otherwise it starts as `active` immediately.
+
+  Returns `{:error, :active_subscription_exists}` if the account
+  already has a trialing or active subscription.
+  """
+  def subscribe(account, plan_name) do
+    account_id = extract_account_id(account)
+    plan_slug = to_string(plan_name)
+
+    with {:ok, plan} <- fetch_plan(plan_slug),
+         :ok <- check_no_active_subscription(account_id),
+         {:ok, subscription} <- create_subscription(account_id, plan) do
+      {:ok, subscription}
+    end
+  end
+
+  @doc """
+  Returns the current active or trialing subscription for an account,
+  with the plan preloaded. Returns nil if no active subscription.
+  """
+  def current_subscription(account) do
+    account_id = extract_account_id(account)
+
+    Config.repo().one(
+      from(s in Subscription,
+        where: s.account_id == ^account_id,
+        where: s.status in ^Subscription.active_statuses(),
+        preload: [:plan]
+      )
+    )
+  end
+
+  @doc """
+  Returns the current plan for an account, or nil.
+  """
+  def current_plan(account) do
+    case current_subscription(account) do
+      %Subscription{plan: plan} -> plan
+      nil -> nil
+    end
+  end
+
+  @doc """
+  Cancels the account's active subscription immediately.
+
+  The subscription record is kept with status `canceled` — subscriptions
+  are never deleted. Returns `{:error, :no_active_subscription}` if the
+  account has no active or trialing subscription.
+  """
+  def cancel(account) do
+    account_id = extract_account_id(account)
+
+    with {:ok, subscription} <- get_active_subscription(account_id) do
+      subscription
+      |> Subscription.changeset(%{
+        status: "canceled",
+        canceled_at: utc_now()
+      })
+      |> Config.repo().update()
+    end
+  end
+
+  @doc """
+  Changes an account's current plan in place.
+
+  Does not cancel and recreate — updates the plan_id on the existing
+  subscription. This is intentional for v0.1 simplicity.
+
+  NOTE: A future version should cancel the current subscription and
+  create a new one to preserve billing period history. Use Ecto.Multi
+  for that transition to keep it atomic.
+
+  Returns `{:error, :no_active_subscription}` if the account has no
+  active subscription to change.
+  """
+  def change_plan(account, new_plan_name) do
+    account_id = extract_account_id(account)
+    plan_slug = to_string(new_plan_name)
+
+    with {:ok, plan} <- fetch_plan(plan_slug),
+         {:ok, subscription} <- get_active_subscription(account_id) do
+      subscription
+      |> Subscription.changeset(%{plan_id: plan.id})
+      |> Config.repo().update()
+    end
+  end
+
+  # ---Private helpers---------------------------------------------------------
+  defp extract_account_id(%{id: id}), do: id
+  defp extract_account_id(id) when is_binary(id), do: id
+
+  defp fetch_plan(slug) do
+    case Config.repo().get_by(Plan, name: slug, status: "active") do
+      nil -> {:error, :plan_not_found}
+      plan -> {:ok, plan}
+    end
+  end
+
+  defp check_no_active_subscription(account_id) do
+    exists =
+      Config.repo().exists?(
+        from(s in Subscription,
+          where: s.account_id == ^account_id,
+          where: s.status in ^Subscription.active_statuses()
+        )
+      )
+
+    if exists, do: {:error, :active_subscription_exists}, else: :ok
+  end
+
+  defp get_active_subscription(account_id) do
+    case Config.repo().one(
+           from(s in Subscription,
+             where: s.account_id == ^account_id,
+             where: s.status in ^Subscription.active_statuses()
+           )
+         ) do
+      nil -> {:error, :no_active_subscription}
+      subscription -> {:ok, subscription}
+    end
+  end
+
+  defp create_subscription(account_id, plan) do
+    now = utc_now()
+    {status, trial_ends_at} = trial_attrs(plan, now)
+
+    %Subscription{}
+    |> Subscription.changeset(%{
+      account_id: account_id,
+      plan_id: plan.id,
+      status: status,
+      trial_ends_at: trial_ends_at,
+      current_period_start: now,
+      current_period_end: DateTime.add(now, 30, :day)
+    })
+    |> Config.repo().insert()
+  end
+
+  defp trial_attrs(%Plan{trial_days: days}, now) when days > 0 do
+    {"trialing", DateTime.add(now, days, :day)}
+  end
+
+  defp trial_attrs(_plan, _now), do: {"active", nil}
+
+  defp utc_now do
+    DateTime.utc_now() |> DateTime.truncate(:second)
+  end
+end
