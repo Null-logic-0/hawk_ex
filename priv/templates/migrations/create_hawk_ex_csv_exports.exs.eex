@@ -1,0 +1,27 @@
+defmodule <%= migration_module %> do
+  use Ecto.Migration
+
+  def change do
+    create table(:hawk_ex_csv_exports, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+
+      add :account_id, :binary_id, null: false
+
+      add :export_type, :string, null: false
+      add :status, :string, null: false, default: "pending"
+      add :row_count, :integer
+      add :error_message, :string
+
+      add :file_path, :text
+
+      # Links to oban_jobs when exported asynchronously.
+      add :oban_job_id, :integer
+
+      timestamps(type: :utc_datetime)
+    end
+
+    create index(:hawk_ex_csv_exports, [:account_id])
+    create index(:hawk_ex_csv_exports, [:status])
+    create index(:hawk_ex_csv_exports, [:inserted_at])
+  end
+end

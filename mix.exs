@@ -32,6 +32,9 @@ defmodule HawkEx.MixProject do
       {:postgrex, ">= 0.0.0"},
       {:jason, "~> 1.4"},
       {:phoenix_pubsub, "~> 2.1"},
+      {:oban, "~> 2.17", optional: true},
+      {:ex_aws, "~> 2.5", optional: true},
+      {:ex_aws_s3, "~> 2.5", optional: true},
 
       # Dev/Test only
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}

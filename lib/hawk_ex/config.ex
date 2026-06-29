@@ -36,4 +36,29 @@ defmodule HawkEx.Config do
   def pubsub do
     Application.get_env(:hawk_ex, :pubsub, nil)
   end
+
+  @doc """
+  Returns the configured Oban module, or nil if not configured.
+  Required for async CSV exports.
+  """
+  def oban do
+    Application.get_env(:hawk_ex, :oban, nil)
+  end
+
+  @doc """
+  Returns the configured CSV storage adapter and its options.
+  Defaults to local disk at priv/exports.
+  """
+  def csv_storage do
+    case Application.get_env(:hawk_ex, :csv_storage, nil) do
+      nil ->
+        {HawkEx.CSV.Storage.Local, path: "priv/exports"}
+
+      {adapter, opts} when is_list(opts) ->
+        {adapter, opts}
+
+      adapter when is_atom(adapter) ->
+        {adapter, []}
+    end
+  end
 end
