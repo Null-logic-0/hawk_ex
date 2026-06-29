@@ -1,0 +1,80 @@
+defmodule <%= migration_module %> do
+  use Ecto.Migration
+
+  def change do
+    # ---Plans-------------------------------------------------------------
+    create table(:hawk_ex_plans, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+      add :name, :string, null: false
+      add :display_name, :string, null: false
+      add :trial_days, :integer, null: false, default: 0
+      add :status, :string, null: false, default: "active"
+
+      timestamps(type: :utc_datetime)
+    end
+
+    create unique_index(:hawk_ex_plans, [:name])
+
+    # ---Features---------------------------------------------------------
+    create table(:hawk_ex_features, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+      add :key, :string, null: false
+      add :description, :string
+      add :feature_type, :string, null: false
+
+      timestamps(type: :utc_datetime)
+    end
+
+    create unique_index(:hawk_ex_features, [:key])
+
+    # ---Plan Features-----------------------------------------------------
+    create table(:hawk_ex_plan_features, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+      add :plan_id,
+          references(:hawk_ex_plans, type: :binary_id, on_delete: :delete_all),
+          null: false
+      add :feature_id,
+          references(:hawk_ex_features, type: :binary_id, on_delete: :restrict),
+          null: false
+      add :value, :string, null: false
+
+      timestamps(type: :utc_datetime)
+    end
+
+    create unique_index(:hawk_ex_plan_features, [:plan_id, :feature_id])
+    create index(:hawk_ex_plan_features, [:feature_id])
+
+
+    # ----Subscriptions-----------------------------------------------------------
+    create table(:hawk_ex_subscriptions, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+
+
+      add :account_id, :binary_id, null: false
+
+      add :plan_id,
+          references(:hawk_ex_plans, type: :binary_id, on_delete: :restrict),
+          null: false
+      add :status, :string, null: false, default: "active"
+      add :trial_ends_at, :utc_datetime
+      add :current_period_start, :utc_datetime
+      add :current_period_end, :utc_datetime
+      add :canceled_at, :utc_datetime
+      add :external_id, :string
+      add :metadata, :map, default: %{}
+
+      timestamps(type: :utc_datetime)
+    end
+
+    create index(:hawk_ex_subscriptions, [:account_id])
+    create index(:hawk_ex_subscriptions, [:plan_id])
+
+
+    create unique_index(
+      :hawk_ex_subscriptions,
+      [:account_id],
+      where: "status IN ('trialing', 'active')",
+      name: :hawk_ex_subscriptions_one_active_per_account
+    )
+  end
+end
