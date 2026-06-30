@@ -37,6 +37,7 @@ defmodule HawkEx.CSV do
       HawkEx.CSV.export(account, MyApp.CSV.Formatters.Users)
   """
 
+  import Ecto.Query
   alias HawkEx.Config
   alias HawkEx.CSV.{Export, Exporter}
 
@@ -80,6 +81,34 @@ defmodule HawkEx.CSV do
     else
       {:error, :oban_not_available}
     end
+  end
+
+  @doc """
+  Returns a page of CSV exports across all accounts, newest first.
+
+  ## Options
+    * `:page` — 1-indexed page number (default: 1)
+    * `:per_page` — rows per page (default: 50)
+    * `:search` — optional search term, matches `export_type` (default: nil)
+
+  Returns `%{entries:, page:, per_page:, total_count:, total_pages:}`.
+
+  ## Example
+
+      HawkEx.CSV.recent_exports(page: 1, per_page: 50)
+      # => %{entries: [...], page: 1, per_page: 50, total_count: 45, total_pages: 1}
+
+      HawkEx.CSV.recent_exports(search: "subscriptions")
+      # => only exports where export_type matches "subscriptions"
+  """
+  def recent_exports(opts \\ []) do
+    HawkEx.Pagination.paginate(
+      Ecto.Query.from(e in Export),
+      Keyword.put(opts, :search_fun, fn query, search ->
+        pattern = "%#{search}%"
+        Ecto.Query.from(e in query, where: ilike(e.export_type, ^pattern))
+      end)
+    )
   end
 
   @doc "Returns all exports for an account, newest first."

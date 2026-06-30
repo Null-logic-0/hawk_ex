@@ -59,7 +59,7 @@ defmodule HawkEx.Audit do
   ## Options
     * `:page` — 1-indexed page number (default: 1)
     * `:per_page` — rows per page (default: 50)
-    * `:search` — optional search term to filter by action (default: nil)
+    * `:search` — optional search term, matches `action` (default: nil)
 
   Returns a map with the page of entries plus pagination metadata,
   so the caller never needs a second query to know total pages.
@@ -70,32 +70,13 @@ defmodule HawkEx.Audit do
       # => %{entries: [...], page: 1, per_page: 50, total_count: 312, total_pages: 7}
   """
   def recent(opts \\ []) do
-    page = Keyword.get(opts, :page, 1)
-    per_page = Keyword.get(opts, :per_page, 50)
-    search = Keyword.get(opts, :search)
-    offset = (page - 1) * per_page
-
-    filtered = filter_query(search)
-
-    total_count =
-      Config.repo().aggregate(filtered, :count, :id)
-
-    entries =
-      Config.repo().all(
-        from(l in filtered,
-          order_by: [desc: l.inserted_at],
-          limit: ^per_page,
-          offset: ^offset
-        )
-      )
-
-    %{
-      entries: entries,
-      page: page,
-      per_page: per_page,
-      total_count: total_count,
-      total_pages: ceil(total_count / per_page)
-    }
+    HawkEx.Pagination.paginate(
+      Ecto.Query.from(l in Log),
+      Keyword.put(opts, :search_fun, fn query, search ->
+        pattern = "%#{search}%"
+        Ecto.Query.from(l in query, where: ilike(l.action, ^pattern))
+      end)
+    )
   end
 
   @doc "Returns all audit entries for a specific account_id."
@@ -123,13 +104,6 @@ defmodule HawkEx.Audit do
   end
 
   # ---Private-------------------------------------------------------------
-
-  defp filter_query(search) when search in [nil, ""], do: from(l in Log)
-
-  defp filter_query(search) do
-    pattern = "%#{search}%"
-    from(l in Log, where: ilike(l.action, ^pattern))
-  end
 
   defp extract_id(nil), do: nil
   defp extract_id(%{id: id}), do: id
