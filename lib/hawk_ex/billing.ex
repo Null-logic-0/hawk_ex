@@ -75,6 +75,52 @@ defmodule HawkEx.Billing do
   end
 
   @doc """
+  Returns a page of active/trialing subscriptions, newest first,
+  with plan preloaded.
+
+  ## Options
+    * `:page` — 1-indexed page number (default: 1)
+    * `:per_page` — rows per page (default: 50)
+    * `:search` — optional search term, matches account_id (default: nil)
+
+  Returns a map with the page of entries plus pagination metadata.
+  """
+
+  def recent_subscriptions(opts \\ []) do
+    page = Keyword.get(opts, :page, 1)
+    per_page = Keyword.get(opts, :per_page, 50)
+    search = Keyword.get(opts, :search)
+    offset = (page - 1) * per_page
+
+    base_query =
+      from(s in Subscription,
+        where: s.status in ^Subscription.active_statuses()
+      )
+
+    filtered = filter_subscriptions(base_query, search)
+
+    total_count = Config.repo().aggregate(filtered, :count, :id)
+
+    entries =
+      Config.repo().all(
+        from(s in filtered,
+          order_by: [desc: s.inserted_at],
+          limit: ^per_page,
+          offset: ^offset,
+          preload: [:plan]
+        )
+      )
+
+    %{
+      entries: entries,
+      page: page,
+      per_page: per_page,
+      total_count: total_count,
+      total_pages: max(1, ceil(total_count / per_page))
+    }
+  end
+
+  @doc """
   Cancels the account's active subscription immediately.
 
   The subscription record is kept with status `canceled` — subscriptions
@@ -133,8 +179,17 @@ defmodule HawkEx.Billing do
   end
 
   # ---Private helpers---------------------------------------------------------
+
   defp extract_account_id(%{id: id}), do: id
+
   defp extract_account_id(id) when is_binary(id), do: id
+
+  defp filter_subscriptions(query, search) when search in [nil, ""], do: query
+
+  defp filter_subscriptions(query, search) do
+    pattern = "%#{search}%"
+    from(s in query, where: ilike(fragment("?::text", s.account_id), ^pattern))
+  end
 
   defp fetch_plan(slug) do
     case Config.repo().get_by(Plan, name: slug, status: "active") do
