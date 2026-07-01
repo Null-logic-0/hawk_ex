@@ -61,4 +61,29 @@ defmodule HawkEx.Config do
         {adapter, []}
     end
   end
+
+  @doc """
+  Returns a snapshot of all current HAWK_EX configuration for display
+  purposes (e.g. the dashboard's Configuration page). Never raises —
+  unconfigured values appear as `nil`.
+  """
+  def snapshot do
+    %{
+      repo: safe_get(:repo),
+      account_schema: safe_get(:account_schema),
+      pubsub: safe_get(:pubsub),
+      oban: safe_get(:oban),
+      csv_storage: safe_csv_storage()
+    }
+  end
+
+  # --- Private Helpers ---
+
+  defp safe_get(key), do: Application.get_env(:hawk_ex, key, nil)
+
+  defp safe_csv_storage do
+    csv_storage()
+  rescue
+    _ -> nil
+  end
 end
