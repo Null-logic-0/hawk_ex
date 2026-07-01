@@ -128,7 +128,44 @@ defmodule HawkEx.Entitlements do
     %{plans: plans, features: features, matrix: matrix}
   end
 
+  @doc """
+  Returns all entitlement values for an account's current plan.
+
+  Returns `{:ok, %{plan: Plan.t(), features: [%{key, feature_type, value}]}}`
+  or `{:error, :no_subscription}` if the account has no active plan.
+  """
+
+  def for_account(account) do
+    account_id = extract_account_id(account)
+
+    case Billing.current_plan(account_id) do
+      nil ->
+        {:error, :no_subscription}
+
+      plan ->
+        features =
+          Config.repo().all(
+            from(pf in HawkEx.Billing.PlanFeature,
+              join: f in HawkEx.Billing.Feature,
+              on: f.id == pf.feature_id,
+              where: pf.plan_id == ^plan.id,
+              select: %{
+                key: f.key,
+                description: f.description,
+                feature_type: f.feature_type,
+                value: pf.value
+              }
+            )
+          )
+
+        {:ok, %{plan: plan, features: features}}
+    end
+  end
+
   # ---Private helpers-----------------------------------------------
+
+  defp extract_account_id(%{id: id}), do: id
+  defp extract_account_id(id) when is_binary(id), do: id
 
   defp get_active_plan(account) do
     case Billing.current_plan(account) do
