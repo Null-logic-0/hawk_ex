@@ -92,6 +92,42 @@ defmodule HawkEx.Entitlements do
     end
   end
 
+  @doc """
+  Returns the full entitlements matrix for display — all features,
+  all active plans, and the value each plan grants for each feature.
+
+  Returns a map with:
+    * `:plans` — list of active plans, ordered by trial_days ascending
+    * `:features` — list of all features
+    * `:matrix` — map of `{plan_id, feature_key}` → value string
+  """
+
+  def matrix do
+    plans =
+      Config.repo().all(
+        from(p in HawkEx.Billing.Plan,
+          where: p.status == "active",
+          order_by: [asc: p.trial_days]
+        )
+      )
+
+    features = Config.repo().all(Feature)
+
+    plan_features =
+      Config.repo().all(
+        from(pf in PlanFeature,
+          preload: [:feature]
+        )
+      )
+
+    matrix =
+      Map.new(plan_features, fn pf ->
+        {{pf.plan_id, pf.feature.key}, pf.value}
+      end)
+
+    %{plans: plans, features: features, matrix: matrix}
+  end
+
   # ---Private helpers-----------------------------------------------
 
   defp get_active_plan(account) do
