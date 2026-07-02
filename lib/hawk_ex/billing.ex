@@ -165,6 +165,15 @@ defmodule HawkEx.Billing do
     end
   end
 
+  @doc """
+  Returns a single subscription by id with plan preloaded,
+  or nil if not found.
+  """
+  def get_subscription(id) do
+    Config.repo().get(Subscription, id)
+    |> Config.repo().preload(:plan)
+  end
+
   # ---Private helpers---------------------------------------------------------
 
   defp extract_account_id(%{id: id}), do: id
