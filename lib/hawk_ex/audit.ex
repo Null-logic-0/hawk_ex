@@ -89,6 +89,23 @@ defmodule HawkEx.Audit do
     )
   end
 
+  @doc """
+  Fast typeahead search across audit log actions.
+  Returns up to `limit` results matching action.
+  """
+  def search(query, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 5)
+    pattern = "%#{query}%"
+
+    Config.repo().all(
+      from(l in Log,
+        where: ilike(l.action, ^pattern),
+        order_by: [desc: l.inserted_at],
+        limit: ^limit
+      )
+    )
+  end
+
   # ---Internal-------------------------------------------------------------
 
   @doc false

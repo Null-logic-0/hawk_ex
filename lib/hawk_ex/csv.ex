@@ -125,6 +125,23 @@ defmodule HawkEx.CSV do
     )
   end
 
+  @doc """
+  Fast typeahead search across CSV exports by type.
+  Returns up to `limit` results.
+  """
+  def search_exports(query, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 5)
+    pattern = "%#{query}%"
+
+    Config.repo().all(
+      from(e in Export,
+        where: ilike(e.export_type, ^pattern),
+        order_by: [desc: e.inserted_at],
+        limit: ^limit
+      )
+    )
+  end
+
   @doc "Returns a single export by id."
   def get_export(id) do
     case Config.repo().get(Export, id) do

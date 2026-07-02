@@ -174,6 +174,29 @@ defmodule HawkEx.Billing do
     |> Config.repo().preload(:plan)
   end
 
+  @doc """
+  Fast typeahead search across active subscriptions.
+  Returns up to `limit` results matching account_id or plan name.
+  """
+  def search_subscriptions(query, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 5)
+    pattern = "%#{query}%"
+
+    Config.repo().all(
+      from(s in Subscription,
+        join: p in HawkEx.Billing.Plan,
+        on: p.id == s.plan_id,
+        where: s.status in ^Subscription.active_statuses(),
+        where:
+          ilike(fragment("?::text", s.account_id), ^pattern) or
+            ilike(p.name, ^pattern),
+        order_by: [desc: s.inserted_at],
+        limit: ^limit,
+        preload: [:plan]
+      )
+    )
+  end
+
   # ---Private helpers---------------------------------------------------------
 
   defp extract_account_id(%{id: id}), do: id
